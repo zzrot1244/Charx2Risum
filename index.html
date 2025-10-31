@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>test</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: #f4f7f6;
+      color: #333;
+      padding: 20px;
+      display: grid;
+      place-items: center;
+      min-height: 90vh;
+    }
+    .container {
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+      padding: 25px 30px;
+      max-width: 800px;
+      width: 100%;
+    }
+    h2 {
+      color: #111;
+      border-bottom: 2px solid #eee;
+      padding-bottom: 10px;
+    }
+    input[type="file"], input[type="text"], input[type="number"] {
+      font-size: 16px;
+      padding: 10px;
+      border: 2px dashed #ddd;
+      border-radius: 8px;
+      display: block;
+      width: 95%;
+      margin-bottom: 10px;
+    }
+    button {
+      font-size: 16px;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      background-color: #007bff;
+      color: white;
+      margin-top: 10px;
+    }
+    button:hover { background-color: #0056b3; }
+    #createRisumButton {
+      background-color: #28a745;
+      display: none; /* 로드 완료 전까지 숨김 */
+    }
+    #createRisumButton:hover { background-color: #218838; }
+    #status {
+      margin-top: 15px;
+      font-weight: bold;
+      color: #555;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h2>.charx → .risum 변환기</h2>
+    <p>.charx 파일을 선택하면 내부 에셋을 읽어 새 .risum 파일로 만듭니다.</p>
+    <input type="text" id="charName" placeholder="명" />
+    <input type="checkbox" id="hasNameToggle"/> 에셋의 첫 부분에 이름 존재함<br/>
+    <input type="text" id="filterText" placeholder="🔍 에셋 이름 필터 (예: 'avatar')" />
+    <input type="checkbox" id="hasCostumeToggle"/> 에셋의 두번째 부분에 복장 존재함<br/>
+    <input type="file" id="fileInput" accept=".charx, .zip" />
+    <div id="status">.charx 파일을 선택해주세요.</div>
+    
+    <button id="createRisumButton">
+      New .risum 파일 생성
+    </button>
+  </div>
+
+<script type="module">
+    import { encodeRPack } from './rpack_bg.js'; // 위치 확인 필요
+
+    class BinaryWriter {
+    parts = []; totalLength = 0;
+    writeByte(v) { const a = new Uint8Array([v]); this.parts.push(a); this.totalLength += 1; }
+    writeUInt32LE(v) { const b = new ArrayBuffer(4); new DataView(b).setUint32(0,v,true); this.parts.push(new Uint8Array(b)); this.totalLength += 4; }
+    writeBytes(d) { this.parts.push(d); this.totalLength += d.length; }
+    toUint8Array() { const r = new Uint8Array(this.totalLength); let o=0; for(const p of this.parts){r.set(p,o);o+=p.length;} return r; }
+    }
+
+    const MAGIC_NUMBER = 111, VERSION = 0, ASSET_MARKER = 1, EOF_MARKER = 0;
+    const textEncoder = new TextEncoder();
+
+    const fileInput = document.getElementById('fileInput');
+    const filterInput = document.getElementById('filterText');
+    const indexInput = document.getElementById('index');
+    const statusDiv = document.getElementById('status');
+    const createRisumButton = document.getElementById('createRisumButton');
+    const risumNameSpan = document.getElementById('risumName');
+    const hasName = document.getElementById('hasNameToggle');
+    const hasCostume = document.getElementById('hasCostumeToggle');
+    const charNameInput = document.getElementById('charName');
+
+    filterInput.style.display = hasNameToggle.checked ? 'inline-block' : 'none';
+    hasNameToggle.addEventListener('change', () => {
+        filterInput.style.display = hasNameToggle.checked ? 'inline-block' : 'none';
+    });
+
+    let processedAssetsMap = new Map();
+    let originalCardName = "new_module";
+
+    fileInput.addEventListener('change', async (event)=>{
+    const file = event.target.files[0];
+    if(!file) return;
+    statusDiv.textContent = `📂 '${file.name}' 처리 중...`;
+    createRisumButton.style.display='none';
+    processedAssetsMap.clear();
+
+    try{
+        const buffer = await file.arrayBuffer();
+        const filterText = filterInput.value.trim();
+        const { assetNameMap, cardName } = await makeAssetNameMap(buffer, filterText);
+        originalCardName = cardName || "new_module";
+
+        const zip = await JSZip.loadAsync(buffer);
+        processedAssetsMap = await loadAssetsIntoMemory(zip, assetNameMap);
+
+        statusDiv.textContent = `✅ ${processedAssetsMap.size}개 에셋 로드 완료. .risum 생성 가능`;
+        if(processedAssetsMap.size>0) createRisumButton.style.display='block';
+        else statusDiv.textContent="⚠️ 일치하는 에셋이 없습니다.";
+    }catch(err){ console.error(err); statusDiv.textContent="❌ 오류: "+err.message; }
+    });
+
+    createRisumButton.addEventListener('click', async ()=>{
+    if(processedAssetsMap.size===0){ alert("변환할 에셋이 없습니다."); return; }
+    statusDiv.textContent=`🖊️ ${processedAssetsMap.size}개 에셋으로 .risum 생성 중...`;
+    const charName = charNameInput.value.trim();
+
+    try{
+        const assetsForExport=[], assetsForJson=[];
+        for(const [fullName, blob] of processedAssetsMap.entries()){
+        const arrayBuffer=await blob.arrayBuffer();
+        const uint8Data=new Uint8Array(arrayBuffer);
+        assetsForExport.push({id: fullName, data:uint8Data});
+
+        const extension=fullName.split('.').pop()||"png";
+        
+        const nameWithoutExt=fullName.substring(0, fullName.lastIndexOf('.'));
+        const replaceName = nameWithoutExt.replace('.', '_')
+        const splitNameParts = replaceName.split('_');
+        
+        let assetName = charName;
+        if (hasName) {
+            assetName += '_' + splitNameParts.slice(1).join('_'); 
+        } else {
+            assetName += '_' + splitNameParts.join('_');
+        }
+
+        assetsForJson.push([assetName,"",extension]);
+        }
+
+        const newModuleId=crypto.randomUUID();
+        const moduleData=createModuleData(newModuleId, charName);
+        moduleData.assets=assetsForJson;
+
+        const fileBytes=await exportRisum(moduleData, assetsForExport);
+        triggerDownload(fileBytes, `${charName}.risum`);
+        statusDiv.textContent=`✅ ${charName}.risum 생성 완료!`;
+    }catch(err){ console.error(err); statusDiv.textContent="❌ .risum 생성 오류: "+err.message; }
+    });
+
+    async function makeAssetNameMap(buffer, filterText=""){
+    let zip;
+    try{ zip=await JSZip.loadAsync(buffer); } catch{ throw new Error("ZIP 파일 열기 실패"); }
+    const cardJsonFile=zip.file('card.json');
+    if(!cardJsonFile) throw new Error("'card.json' 없음");
+    const assetNameMap=new Map();
+    const metadata=JSON.parse(await cardJsonFile.async('string'));
+    const assetsList=metadata?.data?.assets||[];
+    const cardName=metadata?.data?.name||"new_module";
+    for(const asset of assetsList){
+        const uri=asset.uri?.split('/').pop();
+        const name=asset.name||"";
+        if(!uri) continue;
+        if(!filterText || name.includes(filterText)) assetNameMap.set(uri,name);
+    }
+    return { assetNameMap, cardName };
+    }
+
+    async function loadAssetsIntoMemory(zip, assetMap){
+    const assetDataMap=new Map();
+    for(const [path,file] of Object.entries(zip.files)){
+        const fileName=path.split('/').pop();
+        if(assetMap.has(fileName)){
+        const blob=await file.async("blob");
+        const assetName=assetMap.get(fileName);
+        assetDataMap.set(assetName,blob);
+        }
+    }
+    return assetDataMap;
+    }
+
+    function createModuleData(id,name){
+    return { name, description:"charx 변환 모듈", id, assets:[], namespace:`ns_${id.replace(/-/g,'_').substring(0,10)}`, hideIcon:false, customModuleToggle:"", regex:[], lorebook:[], trigger:[], lowLevelAccess:false, backgroundEmbedding:"" };
+    }
+
+    async function exportRisum(moduleData, assets){
+    const writer=new BinaryWriter();
+    const mainDataWrapper={module:moduleData,type:"risuModule"};
+    const mainDataJson=textEncoder.encode(JSON.stringify(mainDataWrapper));
+    const compressedMainData=await encodeRPack(mainDataJson);
+
+    writer.writeByte(MAGIC_NUMBER);
+    writer.writeByte(VERSION);
+    writer.writeUInt32LE(compressedMainData.length);
+    writer.writeBytes(compressedMainData);
+
+    for(const asset of assets){
+        const compressedAssetData=await encodeRPack(asset.data);
+        writer.writeByte(ASSET_MARKER);
+        writer.writeUInt32LE(compressedAssetData.length);
+        writer.writeBytes(compressedAssetData);
+    }
+
+    writer.writeByte(EOF_MARKER);
+    return writer.toUint8Array();
+    }
+
+    function triggerDownload(bytes, filename){
+    const blob=new Blob([bytes],{type:'application/octet-stream'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    }
+    </script>
+</body>
+</html>
