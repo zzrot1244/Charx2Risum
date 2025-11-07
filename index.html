@@ -4,89 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Charx2Risum</title>
-  <style>
-    /* 기존 스타일 유지 */
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background-color: #f4f7f6;
-      color: #333;
-      padding: 20px;
-      display: grid;
-      place-items: center;
-      min-height: 90vh;
-    }
-
-    .container {
-      background: #ffffff;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-      padding: 25px 30px;
-      max-width: 800px;
-      width: 100%;
-    }
-
-    h2 {
-      color: #111;
-      border-bottom: 2px solid #eee;
-      padding-bottom: 10px;
-    }
-
-    input[type="file"],
-    input[type="text"],
-    input[type="number"] {
-      font-size: 16px;
-      padding: 10px;
-      border: 2px dashed #ddd;
-      border-radius: 8px;
-      display: block;
-      width: 95%;
-      margin-bottom: 10px;
-    }
-    
-    /* 🚨 textarea 스타일 추가 */
-    textarea {
-      font-size: 14px;
-      padding: 10px;
-      border: 2px dashed #ccc;
-      border-radius: 8px;
-      display: block;
-      width: 95%;
-      height: 200px; /* 적절한 높이 설정 */
-      margin-bottom: 10px;
-      resize: vertical;
-    }
-
-    button {
-      font-size: 16px;
-      padding: 12px 20px;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      background-color: #007bff;
-      color: white;
-      margin-top: 10px;
-    }
-
-    button:hover {
-      background-color: #0056b3;
-    }
-
-    #createRisumButton {
-      background-color: #28a745;
-      display: none;
-      /* 로드 완료 전까지 숨김 */
-    }
-
-    #createRisumButton:hover {
-      background-color: #218838;
-    }
-
-    #status {
-      margin-top: 15px;
-      font-weight: bold;
-      color: #555;
-    }
-  </style>
+  <link rel="stylesheet" href="./styles.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 
@@ -94,304 +12,56 @@
   <div class="container">
     <h2>.charx → .risum 변환기</h2>
     <p>.charx 파일을 선택하면 내부 에셋을 읽어 새 .risum 파일로 만듭니다.</p>
-    <input type="text" id="charName" placeholder="캐릭터 이름" />
-    <input type="checkbox" id="hasNameToggle" /> 에셋의 첫 부분에 이름 존재함<br />
-    <input type="text" id="filterText" placeholder="🔍 에셋 이름 필터 (예: 'avatar')" />
-    <input type="checkbox" id="hasCostumeToggle" /> 에셋의 두번째 부분에 복장 존재함(동작안함)<br />
+    <div class="name-input-row">
+      <input type="text" id="charName" placeholder="캐릭터 이름" />
+      <input type="text" id="filterText" placeholder="🔍 원본 캐릭터 이름" />
+    </div>
+    <div class="toggle-row">
+      <label>
+        <input type="checkbox" id="hasNameToggle" /> 에셋의 첫 부분에 이름 존재 안함
+      </label>
+      <label>
+        <input type="checkbox" id="useCostumeToggle" /> 복장 시스템 사용
+      </label>
+    </div>
     
-    <textarea id="profileInput" placeholder="여기에 캐릭터 프로필을 입력하세요 (예시: # Character Profile: 캐릭터 이름...)"></textarea>
-    
-    <input type="file" id="fileInput" accept=".charx, .zip" />
-    <div id="status">.charx 파일을 선택해주세요.</div>
+    <div id="content-wrapper">
+      <div class="profile-section">
+        <h3>캐릭터 프로필</h3>
+        <textarea id="profileInput" placeholder="여기에 캐릭터 프로필을 입력하세요 (예시: # Character Profile: 캐릭터 이름...)"></textarea>
+      </div>
+      <div class="image-section">
+        <div class="image-header">
+          <h3>에셋 이미지</h3>
+          <div class="toggle-group">
+            <label class="toggle-label">
+              <input type="checkbox" id="viewImagesButton" />
+              <span>이미지 보이기</span>
+            </label>
+            <label class="toggle-label">
+              <input type="checkbox" id="hideTagInputToggle" />
+              <span>텍스트 추가 안하기</span>
+            </label>
+          </div>
+        </div>
+        <div id="imageControls" class="image-controls" style="display: none;">
+          <input type="text" id="tagInput" placeholder="추가할 텍스트 입력" />
+          <button id="addTagButton">+</button>
+        </div>
+        <div id="imagePreviewContainer" class="image-preview-container"></div>
+      </div>
+    </div>
 
-    <button id="createRisumButton">
-      New .risum 파일 생성
-    </button>
+    <div class="file-action-row">
+      <input type="file" id="fileInput" accept=".charx, .zip, .PNG, .JPG, .JPEG" />
+      <button id="createRisumButton">
+        New .risum 파일 생성
+      </button>
+    </div>
+    <div id="status">.charx 파일을 선택해주세요.</div>
   </div>
 
-  <script type="module">
-    import { encodeRPack } from './rpack_bg.js'; // 위치 확인 필요
-
-    // 정규식 템플릿 (재사용을 위해 복원)
-    const reTemplate = {
-      "comment": "",
-      "in": "",
-      "out": "",
-      "type": "",
-      "ableFlag": false
-    }
-
-    class BinaryWriter {
-      parts = []; totalLength = 0;
-      writeByte(v) { const a = new Uint8Array([v]); this.parts.push(a); this.totalLength += 1; }
-      writeUInt32LE(v) { const b = new ArrayBuffer(4); new DataView(b).setUint32(0, v, true); this.parts.push(new Uint8Array(b)); this.totalLength += 4; }
-      writeBytes(d) { this.parts.push(d); this.totalLength += d.length; }
-      toUint8Array() { const r = new Uint8Array(this.totalLength); let o = 0; for (const p of this.parts) { r.set(p, o); o += p.length; } return r; }
-    }
-
-    const MAGIC_NUMBER = 111, VERSION = 0, ASSET_MARKER = 1, EOF_MARKER = 0;
-    const textEncoder = new TextEncoder();
-
-    const fileInput = document.getElementById('fileInput');
-    const filterInput = document.getElementById('filterText');
-    const statusDiv = document.getElementById('status');
-    const createRisumButton = document.getElementById('createRisumButton');
-    const hasName = document.getElementById('hasNameToggle');
-    const charNameInput = document.getElementById('charName');
-    // 🚨 프로필 입력란 DOM 가져오기
-    const profileInput = document.getElementById('profileInput'); 
-
-    filterInput.style.display = hasNameToggle.checked ? 'inline-block' : 'none';
-    hasNameToggle.addEventListener('change', () => {
-      filterInput.style.display = hasNameToggle.checked ? 'inline-block' : 'none';
-    });
-
-    let processedAssetsMap = new Map();
-    let originalCardName = "new_module";
-
-    fileInput.addEventListener('change', async (event) => {
-      const file = event.target.files[0];
-      if (!file) return;
-      statusDiv.textContent = `📂 '${file.name}' 처리 중...`;
-      createRisumButton.style.display = 'none';
-      processedAssetsMap.clear();
-
-      try {
-        const buffer = await file.arrayBuffer();
-        const filterText = filterInput.value.trim();
-        const { assetNameMap, cardName } = await makeAssetNameMap(buffer, filterText);
-        originalCardName = cardName || "new_module";
-
-        const zip = await JSZip.loadAsync(buffer);
-        processedAssetsMap = await loadAssetsIntoMemory(zip, assetNameMap);
-
-        statusDiv.textContent = `✅ ${processedAssetsMap.size}개 에셋 로드 완료. .risum 생성 가능`;
-        if (processedAssetsMap.size > 0) createRisumButton.style.display = 'block';
-        else statusDiv.textContent = "⚠️ 일치하는 에셋이 없습니다.";
-      } catch (err) { console.error(err); statusDiv.textContent = "❌ 오류: " + err.message; }
-    });
-
-    createRisumButton.addEventListener('click', async () => {
-      if (processedAssetsMap.size === 0) { alert("변환할 에셋이 없습니다."); return; }
-      statusDiv.textContent = `🖊️ ${processedAssetsMap.size}개 에셋으로 .risum 생성 중...`;
-      const charName = charNameInput.value.trim();
-      // 🚨 프로필 텍스트 값 읽어오기
-      const profileText = profileInput.value; 
-
-      try {
-        const assetsForExport = [], assetsForJson = [];
-        const costumeSet = new Set();
-        const keywordSet = new Set();
-        for (const [fullName, blob] of processedAssetsMap.entries()) {
-          const arrayBuffer = await blob.arrayBuffer();
-          const uint8Data = new Uint8Array(arrayBuffer);
-          assetsForExport.push({ id: fullName, data: uint8Data });
-
-          const extension = fullName.split('.').pop() || "png";
-
-          const nameWithoutExt = fullName.substring(0, fullName.lastIndexOf('.'));
-          const replaceName = nameWithoutExt.replace('.', '_')
-          const splitNameParts = replaceName.split('_');
-
-          let assetName = charName;
-          if (hasName) {
-            assetName += '_' + splitNameParts.slice(1).join('_');
-          } else {
-            assetName += '_' + splitNameParts.join('_');
-          }
-          const splitAssetName = assetName.split('_')
-          // 🚨 수정된 로직: 배열의 개별 요소를 Set에 추가
-          keywordSet.add(...splitAssetName.slice(1)); 
-
-          assetsForJson.push([assetName, "", extension]);
-        }
-
-        const newModuleId = crypto.randomUUID();
-        // 🚨 프로필 텍스트를 createModuleData에 전달
-        const moduleData = createModuleData(newModuleId, charName, costumeSet, keywordSet, profileText); 
-        moduleData.assets = assetsForJson;
-
-        const fileBytes = await exportRisum(moduleData, assetsForExport);
-        triggerDownload(fileBytes, `${charName}.risum`);
-        statusDiv.textContent = `✅ ${charName}.risum 생성 완료!`;
-      } catch (err) { console.error(err); statusDiv.textContent = "❌ .risum 생성 오류: " + err.message; }
-    });
-
-    // ... (makeAssetNameMap, loadAssetsIntoMemory 함수는 동일) ...
-    async function makeAssetNameMap(buffer, filterText = "") {
-      let zip;
-      try { zip = await JSZip.loadAsync(buffer); } catch { throw new Error("ZIP 파일 열기 실패"); }
-      const cardJsonFile = zip.file('card.json');
-      if (!cardJsonFile) throw new Error("'card.json' 없음");
-      const assetNameMap = new Map();
-      const metadata = JSON.parse(await cardJsonFile.async('string'));
-      const assetsList = metadata?.data?.assets || [];
-      const cardName = metadata?.data?.name || "new_module";
-      for (const asset of assetsList) {
-        const uri = asset.uri?.split('/').pop();
-        const name = asset.name || "";
-        if (!uri) continue;
-        if (!filterText || name.includes(filterText)) assetNameMap.set(uri, name);
-      }
-      return { assetNameMap, cardName };
-    }
-
-    async function loadAssetsIntoMemory(zip, assetMap) {
-      const assetDataMap = new Map();
-      for (const [path, file] of Object.entries(zip.files)) {
-        const fileName = path.split('/').pop();
-        if (assetMap.has(fileName)) {
-          const blob = await file.async("blob");
-          const assetName = assetMap.get(fileName);
-          assetDataMap.set(assetName, blob);
-        }
-      }
-      return assetDataMap;
-    }
-
-    // 🚨 createModuleData 함수 정의 변경: profileText 매개변수 추가
-    function createModuleData(id, name, costume, keywords, profileText) {
-      // 1. keywords 안전 처리 및 정제
-      const safeKeywords = keywords || []; 
-      const keywordArray = [...new Set(Array.from(safeKeywords))]
-          .filter(k => k && typeof k === 'string' && k.trim() !== '') 
-          .map(k => k.trim())
-          .sort(); 
-
-      const all_keywords = keywordArray.join(', ');
-
-      const example1 = keywordArray[0] || 'smile';
-      const example2 = keywordArray[1] || 'angry';
-      const wrongExample = keywordArray[0] || 'smile';
-
-      const GNDtemplate = `## [MUST FOLLOW!] ${name} Persona Image Commands (Keyword-Only)\n\n### Rules\n- Analyze ${name}'s current state.\n- Output 2–4 image tags per response, each on its own line between paragraphs.\n- Use ONLY keywords from the library below.\n- If a desired keyword is missing, pick the CLOSEST valid one.\n- Format: \`<img cmd="${name}_{{keyword}}">\`\n\n### Keyword Library\n${all_keywords}\n\n### Examples\n* \`<img cmd="${name}_${example1}">\`\n* \`<img cmd="${name}_${example2}">\`\n* WRONG: \`<img cmd="${name}.${wrongExample}">\` (use \_)\n* WRONG: \`<img cmd="${name}_very_happy_2">\` (not in library)`;
-      
-      const displayRule = { ...reTemplate };
-      displayRule.comment = "최종 디스플레이"
-      displayRule.in = "<img cmd=\"(.+)\">"
-      displayRule.out = "<style>\n    .image-container {\n        /* --- ▼ 스타일 기반 --- */\n        margin: auto auto;\n        background-size: cover;\n        /* background-position: center 20%;  <-- 삭제 또는 주석 처리 */\n        background-position: center center; /* <-- 추가 */\n        border-radius: 20px;\n        border: 5px solid #EBE0E0;\n        cursor: pointer;\n        transition: all 0.6s ease; /* transition은 이제 필요 없지만, 남겨둬도 문제는 없어요 */\n\n        /* --- ▼ 반응형 너비 설정 --- */\n        {{#if {{? {{screen_width}} > 768 }} }}\n          width: 20em; /* PC에서는 고정 너비 */\n        {{/if}}\n        {{#if {{? {{screen_width}} <= 768 }} }}\n          width: 95%; /* 모바일에서는 꽉 차게 */\n        {{/if}}\n\n        /* --- ▼ '접힌' 상태 삭제 --- */\n        /* aspect-ratio: 1 / 1; <-- 삭제 또는 주석 처리 */\n\n        /* --- ▼ '펼쳐진' 상태 (세로로 길게) - 기본으로 적용 --- */\n        {{#if {{? {{screen_width}} > 768 }} }}\n          aspect-ratio: 2 / 3; /* PC에서는 2:3 비율로 */\n        {{/if}}\n        {{#if {{? {{screen_width}} <= 768 }} }}\n          aspect-ratio: 1 / 1.5; /* 모바일에서는 조금 덜 길게 */\n        {{/if}}\n    }\n\n    /* --- ▼ 마우스를 올렸을 때 '펼쳐진' 상태 --- */\n    /* .image-container:hover { ... }  <-- 이 전체 블록 삭제 */\n\n</style>\n<div class=\"image-container\" style=\"background-image: url('{{raw::$1}}')\"></div>"
-      displayRule.type = "editdisplay"
-
-      const imageRule = { ...reTemplate };
-      // 🚨 정규식 패턴 수정: 그룹 캡쳐를 올바르게 적용합니다.
-      const patternInside = `${name}_(?:${keywordArray.join('|')})`;
-      const imgTag = `<img cmd=\"(${patternInside})\">`;
-      
-      imageRule.comment = "통합 규칙"
-      // in: name_keyword1 또는 name_keyword2... 를 캡쳐합니다.
-      imageRule.in = imgTag
-      // out: 캡쳐된 그룹($1)을 img cmd의 키워드로 사용하여 이미지를 불러옵니다.
-      imageRule.out = "<img cmd=\"$1\">"; 
-      imageRule.type = "editoutput"
-
-      // 🚨 캐릭터 프로필 로어북 항목
-      const profileEntry = {
-          "key": "",
-          "secondkey": "",
-          "insertorder": 100, // 이미지 규칙(100)보다 먼저 삽입
-          "comment": `소개문`,
-          "content": profileText, // 🚨 프로필 텍스트 삽입
-          "mode": "normal",
-          "alwaysActive": false,
-          "selective": false,
-          "extentions": {
-            "risu_case_sensitive": false,
-            "risu_loreCache": null
-          },
-          "loreCache": null,
-          "useRegex": false,
-          "bookVersion": 2
-      };
-
-      const GNDEntry = {
-        "key": "",
-        "secondkey": "",
-        "insertorder": 100,
-        "comment": "글노덮",
-        "content": GNDtemplate,
-        "mode": "normal",
-        "alwaysActive": true,
-        "selective": false,
-        "extentions": {
-          "risu_case_sensitive": false,
-          "risu_loreCache": null
-        },
-        "loreCache": null,
-        "useRegex": false,
-        "bookVersion": 2
-      };
-
-      const trigger1 ={
-      "comment": "",
-      "type": "manual",
-      "conditions": [],
-      "effect": [
-        {
-          "type": "v2Header",
-          "code": "",
-          "indent": 0
-        }
-      ],
-      "lowLevelAccess": false
-    }
-    const trigger2 ={
-      "comment": "New Event",
-      "type": "manual",
-      "conditions": [],
-      "effect": [],
-      "lowLevelAccess": false
-    }
-
-      // 4. 모듈 반환
-      return {
-        name,
-        description: name,
-        id,
-        assets: [],
-        namespace: `ns_${id.replace(/-/g,'_').substring(0,10)}`, // 필수 속성 복원
-        hideIcon: false,
-        customModuleToggle: "", // 필수 속성 복원
-        regex: [imageRule,displayRule], // 이미지 규칙과 디스플레이 규칙 삽입
-        lorebook: [profileEntry, GNDEntry], // 🚨 프로필과 GND 항목 모두 삽입
-        trigger: [trigger1, trigger2],
-        lowLevelAccess: false,
-        backgroundEmbedding: "" // 필수 속성 복원
-      };
-    }
-
-    async function exportRisum(moduleData, assets) {
-      const writer = new BinaryWriter();
-      const mainDataWrapper = { module: moduleData, type: "risuModule" };
-      const mainDataJson = textEncoder.encode(JSON.stringify(mainDataWrapper));
-      const compressedMainData = await encodeRPack(mainDataJson);
-
-      writer.writeByte(MAGIC_NUMBER);
-      writer.writeByte(VERSION);
-      writer.writeUInt32LE(compressedMainData.length);
-      writer.writeBytes(compressedMainData);
-
-      for (const asset of assets) {
-        const compressedAssetData = await encodeRPack(asset.data);
-        writer.writeByte(ASSET_MARKER);
-        writer.writeUInt32LE(compressedAssetData.length);
-        writer.writeBytes(compressedAssetData);
-      }
-
-      writer.writeByte(EOF_MARKER);
-      return writer.toUint8Array();
-    }
-
-    function triggerDownload(bytes, filename) {
-      const blob = new Blob([bytes], { type: 'application/octet-stream' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }
-  </script>
+  <script type="module" src="./main.js"></script>
 </body>
 
 </html>
