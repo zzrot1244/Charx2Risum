@@ -211,6 +211,16 @@ button:hover {
   width: auto;
 }
 
+.image-controls input[type="number"] {
+  font-size: 14px;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  margin: 0;
+  width: 60px;
+  text-align: center;
+}
+
 .image-controls button {
   font-size: 18px;
   font-weight: bold;

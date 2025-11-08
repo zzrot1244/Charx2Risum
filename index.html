@@ -35,6 +35,10 @@
           <h3>에셋 이미지</h3>
           <div class="toggle-group">
             <label class="toggle-label">
+              <input type="checkbox" id="selectAllToggle" />
+              <span>전체 선택</span>
+            </label>
+            <label class="toggle-label">
               <input type="checkbox" id="viewImagesButton" />
               <span>이미지 보이기</span>
             </label>
@@ -46,6 +50,7 @@
         </div>
         <div id="imageControls" class="image-controls" style="display: none;">
           <input type="text" id="tagInput" placeholder="추가할 텍스트 입력" />
+          <input type="number" id="tagIndexInput" placeholder="위치" min="0" value="1" style="width: 60px;" />
           <button id="addTagButton">+</button>
         </div>
         <div id="imagePreviewContainer" class="image-preview-container"></div>
@@ -62,7 +67,6 @@
   </div>
 
   <script type="module" src="./main.js"></script>
-  <a href="https://github.com/zzrot1244/Charx2Risum">깃허브 링크</a>에서 GPL-3.0 라이선스로 배포
 </body>
 
 </html>

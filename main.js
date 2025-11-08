@@ -24,13 +24,23 @@ const viewImagesButton = document.getElementById('viewImagesButton');
 const imagePreviewContainer = document.getElementById('imagePreviewContainer');
 const imageControls = document.getElementById('imageControls');
 const tagInput = document.getElementById('tagInput');
+const tagIndexInput = document.getElementById('tagIndexInput');
 const addTagButton = document.getElementById('addTagButton');
 const hideTagInputToggle = document.getElementById('hideTagInputToggle');
+const selectAllToggle = document.getElementById('selectAllToggle');
 
 // 초기 상태에서 필터 입력창 숨기기
 filterInput.style.display = hasNameToggle.checked ? 'none' : 'inline-block';
 hasNameToggle.addEventListener('change', () => {
   filterInput.style.display = hasNameToggle.checked ? 'none' : 'inline-block';
+});
+
+// 전체 선택 토글
+selectAllToggle.addEventListener('change', () => {
+  const checkboxes = imagePreviewContainer.querySelectorAll('input[type="checkbox"]');
+  checkboxes.forEach(cb => {
+    cb.checked = selectAllToggle.checked;
+  });
 });
 
 hideTagInputToggle.addEventListener('change', () => {
@@ -156,11 +166,20 @@ addTagButton.addEventListener('click', () => {
     return;
   }
 
+  const tagIndex = parseInt(tagIndexInput.value);
+  if (isNaN(tagIndex) || tagIndex < 0) {
+    alert("유효한 위치를 입력하세요 (0 이상).");
+    return;
+  }
+
   const checkboxes = imagePreviewContainer.querySelectorAll('input[type="checkbox"]:checked');
   if (checkboxes.length === 0) {
     alert("하나 이상의 이미지를 선택하세요.");
     return;
   }
+
+  let hasError = false;
+  const errors = [];
 
   checkboxes.forEach(checkbox => {
     const item = checkbox.closest('.preview-item');
@@ -171,15 +190,19 @@ addTagButton.addEventListener('click', () => {
     // 현재 표시된 이름 (확장자 제외)
     const currentNameWithoutExt = finalNameP.textContent.trim();
     
-    // _로 분리하여 1번 인덱스에 태그 삽입
+    // _로 분리
     const parts = currentNameWithoutExt.split('_');
-    if (parts.length > 1) {
-      // 0번: 이름, 1번에 태그 삽입, 나머지는 뒤로
-      parts.splice(1, 0, tagText);
-    } else {
-      // _가 없으면 끝에 추가
-      parts.push(tagText);
+    
+    // 인덱스 범위 체크
+    if (tagIndex > parts.length) {
+      hasError = true;
+      errors.push(`"${currentNameWithoutExt}": 인덱스 ${tagIndex}는 범위를 초과합니다 (최대: ${parts.length})`);
+      return;
     }
+    
+    // 지정된 인덱스에 태그 삽입
+    parts.splice(tagIndex, 0, tagText);
+    
     const newNameWithoutExt = parts.join('_');
     const newMapKey = `${newNameWithoutExt}.${extension}`;
     
@@ -197,9 +220,14 @@ addTagButton.addEventListener('click', () => {
     checkbox.dataset.imageName = newMapKey;
   });
 
+  if (hasError) {
+    alert("일부 이미지에서 오류가 발생했습니다:\n\n" + errors.join('\n'));
+  }
+
   // 입력창 초기화 및 체크박스 해제
   tagInput.value = '';
   checkboxes.forEach(cb => cb.checked = false);
+  selectAllToggle.checked = false;
 });
 
 let processedAssetsMap = new Map();
