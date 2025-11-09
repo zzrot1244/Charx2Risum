@@ -180,6 +180,22 @@ button:hover {
   flex-shrink: 0;
 }
 
+.profile-section input[type="text"] {
+  width: 100%;
+  margin-bottom: 8px;
+  font-size: 14px;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.profile-section textarea {
+  flex: 1;
+  min-height: 0;
+}
+
 .image-header {
   display: flex;
   justify-content: space-between;
@@ -188,8 +204,21 @@ button:hover {
   flex-shrink: 0;
 }
 
+.image-header .header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .image-header h3 {
   margin: 0;
+  line-height: 1;
+}
+
+.image-header .select-all-label {
+  font-size: 12px;
+  margin: 0;
+  white-space: nowrap;
 }
 
 .toggle-group {
@@ -260,6 +289,7 @@ button:hover {
 
 .profile-section textarea {
   flex: 1;
+  min-height: 0;
 }
 
 .image-section .image-preview-container {

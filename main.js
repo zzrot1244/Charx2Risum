@@ -20,6 +20,7 @@ const hasNameToggle = document.getElementById('hasNameToggle');
 const useCostumeToggle = document.getElementById('useCostumeToggle');
 const charNameInput = document.getElementById('charName');
 const profileInput = document.getElementById('profileInput');
+const activationKeyInput = document.getElementById('activationKeyInput');
 const viewImagesButton = document.getElementById('viewImagesButton');
 const imagePreviewContainer = document.getElementById('imagePreviewContainer');
 const imageControls = document.getElementById('imageControls');
@@ -264,11 +265,13 @@ createRisumButton.addEventListener('click', async () => {
   statusDiv.textContent = `🖊️ ${processedAssetsMap.size}개 에셋으로 .risum 생성 중...`;
   const charName = charNameInput.value.trim() || originalCardName;
   const profileText = profileInput.value;
+  const activationKey = activationKeyInput.value.trim();
 
   try {
     const assetsForExport = [], assetsForJson = [];
     const keywordSet = new Set();
     const costumeSet = new Set();
+    const costumeKeywordMap = new Map(); // 복장별 키워드 매핑
     
     for (const [fullName, blob] of processedAssetsMap.entries()) {
       const arrayBuffer = await blob.arrayBuffer();
@@ -286,10 +289,23 @@ createRisumButton.addEventListener('click', async () => {
       
       if (useCostumeToggle.checked && splitAssetName.length > 2) {
         // 복장 시스템 사용: 이름_복장_키워드
-        const costume = splitAssetName[1]; // 첫 번째는 복장
+        const costume = splitAssetName[1];
+        const keywords = splitAssetName.slice(2);
+        
         costumeSet.add(costume);
-        splitAssetName.slice(2).forEach(k => { if (k) keywordSet.add(k); }); // 나머지는 키워드
-        console.log(`에셋: ${fullName} -> 복장: ${costume}, 키워드:`, splitAssetName.slice(2));
+        
+        // 복장별 키워드 매핑
+        if (!costumeKeywordMap.has(costume)) {
+          costumeKeywordMap.set(costume, new Set());
+        }
+        keywords.forEach(k => {
+          if (k) {
+            keywordSet.add(k);
+            costumeKeywordMap.get(costume).add(k);
+          }
+        });
+        
+        console.log(`에셋: ${fullName} -> 복장: ${costume}, 키워드:`, keywords);
       } else {
         // 복장 미사용: 이름_키워드
         splitAssetName.slice(1).forEach(k => { if (k) keywordSet.add(k); });
@@ -302,7 +318,10 @@ createRisumButton.addEventListener('click', async () => {
     const newModuleId = crypto.randomUUID();
     console.log('추출된 복장:', Array.from(costumeSet));
     console.log('추출된 키워드:', Array.from(keywordSet));
-    const moduleData = createModuleData(newModuleId, charName, keywordSet, costumeSet, profileText, useCostumeToggle.checked);
+    console.log('복장별 키워드:', Object.fromEntries(
+      Array.from(costumeKeywordMap.entries()).map(([k, v]) => [k, Array.from(v)])
+    ));
+    const moduleData = createModuleData(newModuleId, charName, keywordSet, costumeSet, costumeKeywordMap, profileText, activationKey, useCostumeToggle.checked);
     console.log('최종 GND:', moduleData.lorebook[1].content);
     moduleData.assets = assetsForJson;
 
@@ -343,7 +362,7 @@ async function loadAssetsIntoMemory(zip, assetMap) {
   return assetDataMap;
 }
 
-function createModuleData(id, name, keywords, costumes, profileText, useCostume) {
+function createModuleData(id, name, keywords, costumes, costumeKeywordMap, profileText, activationKey, useCostume) {
   const safeKeywords = keywords || [];
   const keywordArray = [...new Set(Array.from(safeKeywords))]
       .filter(k => k && typeof k === 'string' && k.trim() !== '')
@@ -358,10 +377,20 @@ function createModuleData(id, name, keywords, costumes, profileText, useCostume)
 
   const all_keywords = keywordArray.join(', ');
   const all_costumes = costumeArray.join(', ');
+  
+  // 복장별 키워드 맵 생성
+  let costumesWithKeywords = '';
+  if (useCostume && costumeKeywordMap) {
+    costumesWithKeywords = costumeArray.map(costume => {
+      const keywords = costumeKeywordMap.get(costume);
+      const keywordList = keywords ? Array.from(keywords).sort().join(', ') : '';
+      return `**${costume}**: ${keywordList}`;
+    }).join('\n');
+  }
 
   const displayRule = { ...reTemplate };
   displayRule.comment = "최종 디스플레이"
-  displayRule.in = "<img cmd=\"(.+)\">"
+  displayRule.in = "<img src=\"(.+)\">"
   displayRule.out = "<style>\n    .image-container {\n        margin: auto auto;\n        background-size: cover;\n        background-position: center center;\n        border-radius: 20px;\n        border: 5px solid #EBE0E0;\n        cursor: pointer;\n        transition: all 0.6s ease;\n        {{#if {{? {{screen_width}} > 768 }} }}\n          width: 20em;\n        {{/if}}\n        {{#if {{? {{screen_width}} <= 768 }} }}\n          width: 95%;\n        {{/if}}\n        {{#if {{? {{screen_width}} > 768 }} }}\n          aspect-ratio: 2 / 3;\n        {{/if}}\n        {{#if {{? {{screen_width}} <= 768 }} }}\n          aspect-ratio: 1 / 1.5;\n        {{/if}}\n    }\n</style>\n<div class=\"image-container\" style=\"background-image: url('{{raw::$1}}')\"></div>"
   displayRule.type = "editdisplay"
 
@@ -371,21 +400,21 @@ function createModuleData(id, name, keywords, costumes, profileText, useCostume)
   if (useCostume) {
     // 복장 시스템 사용: 이름_복장_키워드
     patternInside = `${name}_(?:${costumeArray.join('|')})_(?:${keywordArray.join('|')})`;
-    imgTag = `<img cmd=\"(${patternInside})\">`;
+    imgTag = `<img src=\"(${patternInside})\">`;
   } else {
     // 복장 미사용: 이름_키워드
     patternInside = `${name}_(?:${keywordArray.join('|')})`;
-    imgTag = `<img cmd=\"(${patternInside})\">`;
+    imgTag = `<img src=\"(${patternInside})\">`;
   }
   
   imageRule.comment = "통합 규칙"
   imageRule.in = imgTag
-  imageRule.out = "<img cmd=\"$1\">"; 
+  imageRule.out = "<img src=\"$1\">"; 
   imageRule.type = "editoutput"
 
   // 프로필과 GND 항목을 templates 모듈로 생성
-  const profileEntry = makeProfileEntry(profileText);
-  const GNDEntry = makeGNDEntry(name, all_keywords, all_costumes, useCostume);
+  const profileEntry = makeProfileEntry(profileText, activationKey);
+  const GNDEntry = makeGNDEntry(name, all_keywords, costumesWithKeywords, useCostume, activationKey);
 
   // 트리거는 templates에서 가져온 상수 사용
   // (이미 import 한 trigger1, trigger2 사용)

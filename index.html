@@ -31,16 +31,19 @@
     <div id="content-wrapper">
       <div class="profile-section">
         <h3>캐릭터 프로필</h3>
+        <input type="text" id="activationKeyInput" placeholder="활성화 키 (선택사항)" />
         <textarea id="profileInput" placeholder="여기에 캐릭터 프로필을 입력하세요 (예시: # Character Profile: 캐릭터 이름...)"></textarea>
       </div>
       <div class="image-section">
         <div class="image-header">
-          <h3>에셋 이미지</h3>
-          <div class="toggle-group">
-            <label class="toggle-label">
+          <div class="header-left">
+            <h3>에셋 이미지</h3>
+            <label class="toggle-label select-all-label">
               <input type="checkbox" id="selectAllToggle" />
               <span>전체 선택</span>
             </label>
+          </div>
+          <div class="toggle-group">
             <label class="toggle-label">
               <input type="checkbox" id="viewImagesButton" />
               <span>이미지 보이기</span>
