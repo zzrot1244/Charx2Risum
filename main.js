@@ -342,30 +342,34 @@ createRisumButton.addEventListener('click', async () => {
       const extension = fullName.split('.').pop() || "png";
       const nameWithoutExt = fullName.substring(0, fullName.lastIndexOf('.'));
       
-      // 이름 분해 (언더스코어 기준)
       const splitAssetName = nameWithoutExt.split('_');
       
       if (useCostumeToggle.checked && splitAssetName.length > 2) {
-        // 복장 시스템 사용: 이름_복장_키워드...
+        // [수정됨] 복장 시스템 사용: 이름_복장_나머지전부
         const costume = splitAssetName[1];
-        const keywords = splitAssetName.slice(2);
+        
+        // slice(2)로 잘라낸 배열을 '_'로 다시 합쳐서 하나의 키워드로 만듭니다.
+        const singleKeyword = splitAssetName.slice(2).join('_');
         
         costumeSet.add(costume);
         
         if (!costumeKeywordMap.has(costume)) {
           costumeKeywordMap.set(costume, new Set());
         }
-        keywords.forEach(k => {
-          if (k) {
-            keywordSet.add(k);
-            costumeKeywordMap.get(costume).add(k);
-          }
-        });
+        
+        if (singleKeyword) {
+          keywordSet.add(singleKeyword);
+          costumeKeywordMap.get(costume).add(singleKeyword);
+        }
+        
       } else {
-        // 복장 미사용: 이름_키워드...
-        splitAssetName.slice(1).forEach(k => { 
-          if (k) keywordSet.add(k); 
-        });
+        // [수정됨] 복장 미사용: 이름_나머지전부
+        // slice(1)로 잘라낸 배열을 '_'로 다시 합쳐서 하나의 키워드로 만듭니다.
+        const singleKeyword = splitAssetName.slice(1).join('_');
+        
+        if (singleKeyword) {
+          keywordSet.add(singleKeyword);
+        }
       }
 
       // assets.json에 들어갈 항목
