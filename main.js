@@ -34,6 +34,10 @@ const selectAllToggle = document.getElementById('selectAllToggle');
 filterInput.style.display = hasNameToggle.checked ? 'none' : 'inline-block';
 hasNameToggle.addEventListener('change', () => {
   filterInput.style.display = hasNameToggle.checked ? 'none' : 'inline-block';
+  // If previews are currently shown, re-render them so the name-in-front logic updates immediately
+  if (viewImagesButton.checked) {
+    renderImagePreviews();
+  }
 });
 
 // 전체 선택 토글
@@ -57,108 +61,123 @@ hideTagInputToggle.addEventListener('change', () => {
 
 viewImagesButton.addEventListener('change', () => {
   if (viewImagesButton.checked) {
-    // 토글이 켜졌을 때 이미지 로드 및 컨트롤 표시
-    imagePreviewContainer.innerHTML = ''; // Clear previous previews
-    if (processedAssetsMap.size === 0) {
-      alert("표시할 이미지가 없습니다.");
-      viewImagesButton.checked = false;
-      return;
-    }
-
-    imageControls.style.display = 'flex'; // 컨트롤 표시
-    // 단, "텍스트 추가 안하기"가 체크되어 있으면 숨김
-    if (hideTagInputToggle.checked) {
-      imageControls.style.display = 'none';
-    }
-
-    for (const [name, blob] of processedAssetsMap.entries()) {
-      const url = URL.createObjectURL(blob);
-      const item = document.createElement('div');
-      item.className = 'preview-item';
-
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.dataset.imageName = name;
-
-      const img = document.createElement('img');
-      img.src = url;
-      img.alt = name;
-
-      const infoDiv = document.createElement('div');
-      infoDiv.className = 'preview-item-info';
-
-      const originalNameP = document.createElement('p');
-      originalNameP.className = 'original-name';
-      const originalNameWithoutExt = name.substring(0, name.lastIndexOf('.')) || name;
-      originalNameP.textContent = `원본: ${originalNameWithoutExt}`;
-
-      // 최종 이름 계산 (캐릭터 이름 적용)
-      const charName = charNameInput.value.trim() || originalCardName;
-      const extension = name.split('.').pop() || "png";
-      const nameWithoutExt = name.substring(0, name.lastIndexOf('.'));
-      const replaceName = nameWithoutExt.replace('.', '_');
-      const splitNameParts = replaceName.split('_');
-      
-      let finalAssetName = charName;
-      if (hasNameToggle.checked) {
-        // 이름 존재 안함 - 모든 부분 사용
-        finalAssetName += '_' + splitNameParts.join('_');
-      } else {
-        // 이름 존재함 - 첫 부분 제외
-        finalAssetName += '_' + splitNameParts.slice(1).join('_');
-      }
-
-      const finalNameP = document.createElement('p');
-      finalNameP.className = 'final-name';
-      finalNameP.contentEditable = 'true'; // 편집 가능하게
-      finalNameP.textContent = finalAssetName; // 확장자 제거된 이름만 표시
-      finalNameP.dataset.originalMapKey = name; // Map의 원본 키 저장
-      finalNameP.dataset.extension = extension; // 확장자 저장
-
-      // 편집 완료 시 processedAssetsMap 업데이트
-      finalNameP.addEventListener('blur', (e) => {
-        const newNameWithoutExt = e.target.textContent.trim();
-        if (!newNameWithoutExt) {
-          alert("이름을 비울 수 없습니다.");
-          e.target.textContent = finalAssetName;
-          return;
-        }
-        const oldMapKey = finalNameP.dataset.originalMapKey;
-        const newMapKey = `${newNameWithoutExt}.${extension}`;
-        
-        // Map 업데이트
-        const blob = processedAssetsMap.get(oldMapKey);
-        if (blob) {
-          processedAssetsMap.delete(oldMapKey);
-          processedAssetsMap.set(newMapKey, blob);
-          finalNameP.dataset.originalMapKey = newMapKey; // 새 키로 업데이트
-        }
-        
-        checkbox.dataset.imageName = newMapKey;
-      });
-
-      // Enter 키로도 편집 종료
-      finalNameP.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          e.target.blur();
-        }
-      });
-
-      infoDiv.appendChild(originalNameP);
-      infoDiv.appendChild(finalNameP);
-
-      item.appendChild(checkbox);
-      item.appendChild(img);
-      item.appendChild(infoDiv);
-      imagePreviewContainer.appendChild(item);
-    }
+    renderImagePreviews();
   } else {
     // 토글이 꺼졌을 때 이미지 제거 및 컨트롤 숨김
     imagePreviewContainer.innerHTML = '';
     imageControls.style.display = 'none';
   }
 });
+
+// render previews (extracted so toggles can re-render)
+function renderImagePreviews() {
+  imagePreviewContainer.innerHTML = ''; // 이전 미리보기 초기화
+  if (processedAssetsMap.size === 0) {
+    alert("표시할 이미지가 없습니다.");
+    viewImagesButton.checked = false;
+    return;
+  }
+
+  imageControls.style.display = 'flex'; // 컨트롤 표시
+  // 단, "텍스트 추가 안하기"가 체크되어 있으면 숨김
+  if (hideTagInputToggle.checked) {
+    imageControls.style.display = 'none';
+  }
+
+  for (const [name, blob] of processedAssetsMap.entries()) {
+    const url = URL.createObjectURL(blob);
+    const item = document.createElement('div');
+    item.className = 'preview-item';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.dataset.imageName = name;
+
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = name;
+
+    const infoDiv = document.createElement('div');
+    infoDiv.className = 'preview-item-info';
+
+    // 1. 원본 이름 표시 (참고용)
+    const originalNameP = document.createElement('p');
+    originalNameP.className = 'original-name';
+    const originalNameWithoutExt = name.substring(0, name.lastIndexOf('.')) || name;
+    originalNameP.textContent = `원본: ${originalNameWithoutExt}`;
+
+    // 2. 최종 이름 계산 로직 (캐릭터 이름 및 토글 옵션 적용)
+    const charName = charNameInput.value.trim() || originalCardName;
+    const extension = name.split('.').pop() || "png";
+    const nameWithoutExt = name.substring(0, name.lastIndexOf('.'));
+    
+    // 점(.)을 밑줄(_)로 모두 치환 (파일명 꼬임 방지)
+    const replaceName = nameWithoutExt.replaceAll('.', '_'); 
+    const splitNameParts = replaceName.split('_');
+    
+    let finalAssetName = charName;
+    if (hasNameToggle.checked) {
+      // "이름 존재 안함" 체크 시: 원본의 모든 부분을 붙임
+      finalAssetName += '_' + splitNameParts.join('_');
+    } else {
+      // "이름 존재함" (기본) 시: 원본의 첫 부분(기존 캐릭터명 등)을 제외하고 붙임
+      finalAssetName += '_' + splitNameParts.slice(1).join('_');
+    }
+
+    // 3. 최종 이름 표시 요소 (수정 가능)
+    const finalNameP = document.createElement('p');
+    finalNameP.className = 'final-name';
+    finalNameP.contentEditable = 'true'; // ★ 편집 가능하게 설정
+    finalNameP.textContent = finalAssetName; // 확장자는 떼고 보여줌
+    
+    // ★ 중요: 나중에 파일을 만들 때 필요한 원본 정보를 숨겨둠
+    finalNameP.dataset.originalMapKey = name; 
+    finalNameP.dataset.extension = extension; 
+
+    // 4. 이름 수정 후 포커스 잃었을 때(Blur) 내부 Map 업데이트
+    finalNameP.addEventListener('blur', (e) => {
+      const newNameWithoutExt = e.target.textContent.trim();
+      if (!newNameWithoutExt) {
+        alert("이름을 비울 수 없습니다.");
+        e.target.textContent = finalAssetName; // 원래대로 복구
+        return;
+      }
+      
+      const oldMapKey = finalNameP.dataset.originalMapKey;
+      const newMapKey = `${newNameWithoutExt}.${extension}`;
+      
+      // Map 업데이트: 기존 키 삭제 후 새 키로 등록
+      const blobData = processedAssetsMap.get(oldMapKey);
+      if (blobData) {
+        processedAssetsMap.delete(oldMapKey);
+        processedAssetsMap.set(newMapKey, blobData);
+        
+        // 데이터 속성도 새 키로 업데이트 (다시 수정할 때를 대비)
+        finalNameP.dataset.originalMapKey = newMapKey; 
+        
+        // 체크박스 등 다른 곳에서 참조하는 키도 업데이트
+        checkbox.dataset.imageName = newMapKey;
+      }
+    });
+
+    // 엔터 키 누르면 수정 종료 (줄바꿈 방지)
+    finalNameP.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.target.blur();
+      }
+    });
+
+    infoDiv.appendChild(originalNameP);
+    infoDiv.appendChild(finalNameP);
+
+    item.appendChild(checkbox);
+    item.appendChild(img);
+    item.appendChild(infoDiv);
+    imagePreviewContainer.appendChild(item);
+  }
+}
+
 
 addTagButton.addEventListener('click', () => {
   const tagText = tagInput.value.trim();
@@ -261,40 +280,78 @@ fileInput.addEventListener('change', async (event) => {
 });
 
 createRisumButton.addEventListener('click', async () => {
-  if (processedAssetsMap.size === 0) { alert("변환할 에셋이 없습니다."); return; }
-  statusDiv.textContent = `🖊️ ${processedAssetsMap.size}개 에셋으로 .risum 생성 중...`;
+  // 1. 기본 입력값 확인
   const charName = charNameInput.value.trim() || originalCardName;
+  if (!charName) {
+    alert("캐릭터 이름을 입력해주세요.");
+    return;
+  }
   const profileText = profileInput.value;
   const activationKey = activationKeyInput.value.trim();
 
+  statusDiv.textContent = "데이터 준비 중...";
+
+  // 2. [수정됨] 처리할 에셋 목록 구성 (화면 이름 vs 원본 데이터)
+  const targetAssets = [];
+
+  // (A) 미리보기가 켜져 있고 내용이 있다면 화면의 'final-name'을 사용
+  if (viewImagesButton.checked && imagePreviewContainer.children.length > 0) {
+    const items = imagePreviewContainer.querySelectorAll('.preview-item');
+    items.forEach(item => {
+      const nameEl = item.querySelector('.final-name');
+      if (nameEl) {
+        const finalName = nameEl.textContent.trim();       // 화면에 보이는 최종 이름
+        const ext = nameEl.dataset.extension;              // 확장자
+        const mapKey = nameEl.dataset.originalMapKey;      // 원본 Blob 키
+
+        const blob = processedAssetsMap.get(mapKey);
+        if (blob) {
+          targetAssets.push({ fullName: `${finalName}.${ext}`, blob: blob });
+        }
+      }
+    });
+  } 
+  // (B) 미리보기가 꺼져 있다면 기존 Map 데이터 사용
+  else {
+    for (const [key, blob] of processedAssetsMap.entries()) {
+      targetAssets.push({ fullName: key, blob: blob });
+    }
+  }
+
+  if (targetAssets.length === 0) {
+    alert("변환할 에셋이 없습니다.");
+    statusDiv.textContent = "";
+    return;
+  }
+
   try {
-    const assetsForExport = [], assetsForJson = [];
+    const assetsForExport = [];
+    const assetsForJson = [];
     const keywordSet = new Set();
     const costumeSet = new Set();
     const costumeKeywordMap = new Map(); // 복장별 키워드 매핑
-    
-    for (const [fullName, blob] of processedAssetsMap.entries()) {
+
+    // 3. 구성된 targetAssets를 순회하며 데이터 추출 및 분석
+    for (const { fullName, blob } of targetAssets) {
+      // 바이너리 데이터 준비
       const arrayBuffer = await blob.arrayBuffer();
       const uint8Data = new Uint8Array(arrayBuffer);
       assetsForExport.push({ id: fullName, data: uint8Data });
 
+      // 메타데이터 분석 (이름 기반 키워드/복장 추출)
       const extension = fullName.split('.').pop() || "png";
       const nameWithoutExt = fullName.substring(0, fullName.lastIndexOf('.'));
       
-      // processedAssetsMap의 키는 이미 최종 변환된 이름이므로 그대로 사용
-      const assetName = nameWithoutExt;
-      
-      // 키워드 추출: 캐릭터 이름 이후의 모든 부분
-      const splitAssetName = assetName.split('_');
+      // 이름 분해 (언더스코어 기준)
+      const splitAssetName = nameWithoutExt.split('_');
       
       if (useCostumeToggle.checked && splitAssetName.length > 2) {
-        // 복장 시스템 사용: 이름_복장_키워드
+        // 복장 시스템 사용: 이름_복장_키워드...
         const costume = splitAssetName[1];
         const keywords = splitAssetName.slice(2);
         
         costumeSet.add(costume);
         
-        // 복장별 키워드 매핑
         if (!costumeKeywordMap.has(costume)) {
           costumeKeywordMap.set(costume, new Set());
         }
@@ -304,32 +361,45 @@ createRisumButton.addEventListener('click', async () => {
             costumeKeywordMap.get(costume).add(k);
           }
         });
-        
-        console.log(`에셋: ${fullName} -> 복장: ${costume}, 키워드:`, keywords);
       } else {
-        // 복장 미사용: 이름_키워드
-        splitAssetName.slice(1).forEach(k => { if (k) keywordSet.add(k); });
-        console.log(`에셋: ${fullName} -> 키워드:`, splitAssetName.slice(1));
+        // 복장 미사용: 이름_키워드...
+        splitAssetName.slice(1).forEach(k => { 
+          if (k) keywordSet.add(k); 
+        });
       }
 
-      assetsForJson.push([assetName, "", extension]);
+      // assets.json에 들어갈 항목
+      assetsForJson.push([nameWithoutExt, "", extension]);
     }
 
+    // 4. 모듈 데이터 생성 (createModuleData 호출)
     const newModuleId = crypto.randomUUID();
-    console.log('추출된 복장:', Array.from(costumeSet));
-    console.log('추출된 키워드:', Array.from(keywordSet));
-    console.log('복장별 키워드:', Object.fromEntries(
-      Array.from(costumeKeywordMap.entries()).map(([k, v]) => [k, Array.from(v)])
-    ));
-    const moduleData = createModuleData(newModuleId, charName, keywordSet, costumeSet, costumeKeywordMap, profileText, activationKey, useCostumeToggle.checked);
-    console.log('최종 GND:', moduleData.lorebook[1].content);
+    
+    // 기존에 정의된 createModuleData 함수 사용
+    const moduleData = createModuleData(
+      newModuleId, 
+      charName, 
+      keywordSet, 
+      costumeSet, 
+      costumeKeywordMap, 
+      profileText, 
+      activationKey, 
+      useCostumeToggle.checked
+    );
+    
     moduleData.assets = assetsForJson;
 
-    const fileBytes = await exportRisum(moduleData, assetsForExport);
-    triggerDownload(fileBytes, `${charName}.risum`);
-    statusDiv.textContent = `✅ ${charName}.risum 생성 완료!`;
-  } catch (err) { console.error(err); statusDiv.textContent = "❌ .risum 생성 오류: " + err.message; }
+    // 5. .risum 파일 패킹 및 다운로드
+    const risumBytes = await exportRisum(moduleData, assetsForExport);
+    triggerDownload(risumBytes, `${charName}.risum`);
+    statusDiv.textContent = "완료! 다운로드되었습니다.";
+
+  } catch (e) {
+    console.error(e);
+    statusDiv.textContent = "오류 발생: " + e.message;
+  }
 });
+
 
 async function makeAssetNameMap(buffer, filterText = "") {
   let zip;
